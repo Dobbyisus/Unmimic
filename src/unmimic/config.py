@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     upstream_url: str = "http://localhost:11434/v1"
     # Key the proxy sends to the upstream model. Callers' own keys are never forwarded.
     upstream_api_key: str | None = None
+    # Output guards `unmimic serve` turns on, by registry name. Env: UNMIMIC_OUTPUT_GUARDS='[]'
+    output_guards: list[str] = ["leak_detector"]
     host: str = "127.0.0.1"
     port: int = 9000
     data_dir: Path = Path("data")

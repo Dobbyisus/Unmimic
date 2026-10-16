@@ -114,6 +114,7 @@ def create_app(
 
         client = request.app.state.client
         fmt = known_formats.get(ctx.model, DEFAULT_FORMAT)
+        ctx.metadata["format"] = fmt  # output guards need it to separate answer from reasoning
         if body.get("stream"):
             return await stream_completion(client, body, ctx, fmt, outputs)
         return await complete(client, body, ctx, fmt, outputs)

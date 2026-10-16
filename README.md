@@ -34,7 +34,19 @@ unmimic serve --upstream http://localhost:11434/v1
 
 Then point any OpenAI-compatible client at `http://127.0.0.1:9000/v1` instead of the
 model. Settings can also come from environment variables: `UNMIMIC_UPSTREAM_URL`,
-`UNMIMIC_UPSTREAM_API_KEY`, `UNMIMIC_HOST`, `UNMIMIC_PORT`.
+`UNMIMIC_UPSTREAM_API_KEY`, `UNMIMIC_HOST`, `UNMIMIC_PORT`, and
+`UNMIMIC_OUTPUT_GUARDS` (JSON list, default `["leak_detector"]`).
+
+## Leak detector
+
+On by default. If an answer contains the model's hidden reasoning, whether copied word
+for word, base64- or ROT13-encoded, reversed, wrapped in tags, or translated, the answer
+is replaced with a notice. Install the `ml` extras to turn on the translation check (it
+downloads a ~470 MB multilingual embedding model on first use):
+
+```bash
+pip install -e ".[ml]"
+```
 
 ## Install (development)
 
