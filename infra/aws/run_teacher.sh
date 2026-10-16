@@ -28,10 +28,15 @@ fi
 SYNC=$!
 trap 'kill $SYNC 2>/dev/null; bash infra/aws/sync_s3.sh' EXIT
 
+# GSM8K_LIMIT: how many GSM8K problems to solve (default 3000 of 7473). The run is
+# resumable, so raising it later only solves the extra problems.
+GSM8K_LIMIT=${GSM8K_LIMIT:-3000}
 for dataset in gsm8k math500; do
-  echo "=== $dataset started $(date -u)"
+  limit=()
+  [ "$dataset" = gsm8k ] && limit=(--limit "$GSM8K_LIMIT")
+  echo "=== $dataset started $(date -u) ${limit[*]}"
   python experiments/teacher_gen.py --endpoint http://localhost:8000/v1 --model teacher \
-    --dataset "$dataset" --max-tokens 7800 --concurrency 32
+    --dataset "$dataset" --max-tokens 7800 --concurrency 32 "${limit[@]}"
   echo "=== $dataset finished $(date -u)"
 done
 echo "ALL DONE $(date -u)"
