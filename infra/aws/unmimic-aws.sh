@@ -23,7 +23,7 @@ KEY_NAME=unmimic-key
 ROLE=unmimic-ec2-role
 PROFILE=unmimic-ec2-profile
 SG_NAME=unmimic-ssh
-NAME=unmimic-gpu
+NAME=${NAME:-unmimic-gpu}
 TYPE=${TYPE:-g5.xlarge}
 # 24 GB GPUs within the 8-vCPU G quota, compared by `capacity`.
 CANDIDATE_TYPES="g5.xlarge g6.xlarge"

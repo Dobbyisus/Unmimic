@@ -1,7 +1,8 @@
 """Held-out evaluation of the input guard.
 
-Leave-one-family-out: for each attack family, train the guard on all the OTHER families and
-test on this one, so every recall number is for a kind of attack the guard never saw.
+Leave-one-type-out: for each attack type (a public family plus its private variants), train
+the guard on all OTHER types and test on this one, so every recall number is for a kind of
+attack the guard never saw.
 False positives are measured on WildChat prompts kept out of training
 (data/benign/wildchat_eval.jsonl), reported with a one-sided 95% Clopper-Pearson upper
 bound. A threshold grid shows the trade-off.
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 from pathlib import Path
 
@@ -31,6 +33,13 @@ from unmimic.guards.input.extraction import (
 
 FLAG_GRID = [0.3, 0.5, 0.7, 0.9]
 MEMORY_GRID = [0.65, 0.7, 0.75, 0.8]
+# Private families extend public ones (verbatim_recall_private extends verbatim_recall).
+# They are held out together; otherwise the "unseen" family would still be in training.
+VARIANT_SUFFIX = re.compile(r"_(private|v\d+)$")
+
+
+def attack_type(family_name: str) -> str:
+    return VARIANT_SUFFIX.sub("", family_name)
 
 
 def upper_bound(errors: int, n: int, confidence: float = 0.95) -> float:
@@ -105,10 +114,14 @@ def main() -> None:
     fold_blocked: dict[tuple, list[int]] = {g: [] for g in grid}
     fold_flagged: dict[tuple, list[int]] = {g: [] for g in grid}
     per_family = {}
-    for held_out in families:
-        train = [f for f in families if f.name != held_out.name]
+    types = sorted({attack_type(f.name) for f in families})
+    print(f"{len(types)} attack types (private families held out with their public ones)")
+    for held_type in types:
+        held = [f for f in families if attack_type(f.name) == held_type]
+        train = [f for f in families if attack_type(f.name) != held_type]
         guard = ExtractionGuard(families=train, benign=benign_train, cache_dir=cache)
-        test_vectors, test_spans = embed_prompts(list(held_out.examples), cache)
+        examples = [e for f in held for e in f.examples]
+        test_vectors, test_spans = embed_prompts(examples, cache)
         on_attacks = Scored(guard, test_vectors, test_spans)
         on_benign = Scored(guard, eval_vectors, eval_spans)
         for g in grid:
@@ -118,12 +131,12 @@ def main() -> None:
             fold_blocked[g].append(counts.count("block"))
             fold_flagged[g].append(counts.count("flag"))
             if g == (FLAG_THRESHOLD, MEMORY_THRESHOLD):
-                per_family[held_out.name] = {
-                    a: acts.count(a) / len(acts) for a in ("block", "flag")
-                }
+                per_family[held_type] = {a: acts.count(a) / len(acts) for a in ("block", "flag")}
+                per_family[held_type]["n"] = len(acts)
         print(
-            f"  held out {held_out.name:22s} blocked {per_family[held_out.name]['block']:.0%}"
-            f"  flagged {per_family[held_out.name]['flag']:.0%}"
+            f"  held out {held_type:22s} n={len(examples):3d}  "
+            f"blocked {per_family[held_type]['block']:.0%}  "
+            f"flagged {per_family[held_type]['flag']:.0%}"
         )
 
     # The deployed guard learns every family; its false positives on held-back prompts.

@@ -36,7 +36,8 @@ sudo -u ubuntu -H bash -c '
   set -euxo pipefail
   python3 -m pip install --user --upgrade uv || python3 -m pip install --user --break-system-packages uv
   ~/.local/bin/uv venv ~/venv --python 3.12
-  ~/.local/bin/uv pip install --python ~/venv/bin/python vllm
+  # ninja: FlashInfer JIT-compiles sampling kernels at vLLM startup and fails without it.
+  ~/.local/bin/uv pip install --python ~/venv/bin/python vllm ninja
   grep -q "source ~/venv/bin/activate" ~/.bashrc || echo "source ~/venv/bin/activate" >> ~/.bashrc
 '
 
