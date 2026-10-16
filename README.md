@@ -19,6 +19,15 @@ It does four things:
 
 ## Run the proxy
 
+First, let Unmimic learn where the model puts its reasoning. This asks the model 20
+ordinary questions and saves the result to `data/models/<model>.json`:
+
+```bash
+unmimic init --endpoint http://localhost:11434/v1 --model qwen3:8b
+```
+
+Then start the proxy in front of it:
+
 ```bash
 unmimic serve --upstream http://localhost:11434/v1
 ```

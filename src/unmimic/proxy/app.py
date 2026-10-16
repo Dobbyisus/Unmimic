@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -18,6 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from unmimic.plugins import Context, InputGuard, OutputGuard
+from unmimic.reasoning import DEFAULT_FORMAT, ModelFormat, StreamReasoning, split_message
 
 ANONYMOUS = "anonymous"
 UPSTREAM_TIMEOUT = httpx.Timeout(10.0, read=600.0)
@@ -30,15 +31,6 @@ def account_id_from(request: Request) -> str:
     if scheme.lower() != "bearer" or not key:
         return ANONYMOUS
     return "acct_" + hashlib.sha256(key.encode()).hexdigest()[:16]
-
-
-def extract_reasoning(message: dict[str, Any]) -> str:
-    """Reasoning sent in a separate API field (vLLM ``reasoning_content``, Ollama ``reasoning``).
-
-    Models that put reasoning inline in the text (``<think>`` tags) yield "" here until the
-    format probe exists.
-    """
-    return message.get("reasoning_content") or message.get("reasoning") or ""
 
 
 def error_response(status: int, message: str, error_type: str) -> JSONResponse:
@@ -65,11 +57,18 @@ def create_app(
     input_guards: Iterable[InputGuard] = (),
     output_guards: Iterable[OutputGuard] = (),
     upstream_api_key: str | None = None,
+    formats: Mapping[str, ModelFormat] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
-    """Build the proxy. ``transport`` replaces the network, for tests."""
+    """Build the proxy.
+
+    ``formats`` maps model names to where each puts its reasoning (written by
+    ``unmimic init``); unknown models use ``DEFAULT_FORMAT``. ``transport`` replaces the
+    network, for tests.
+    """
     inputs = list(input_guards)
     outputs = list(output_guards)
+    known_formats = dict(formats or {})
     headers = {"authorization": f"Bearer {upstream_api_key}"} if upstream_api_key else {}
 
     @asynccontextmanager
@@ -114,9 +113,10 @@ def create_app(
                 ctx.metadata.setdefault("flags", []).append(flag)
 
         client = request.app.state.client
+        fmt = known_formats.get(ctx.model, DEFAULT_FORMAT)
         if body.get("stream"):
-            return await stream_completion(client, body, ctx, outputs)
-        return await complete(client, body, ctx, outputs)
+            return await stream_completion(client, body, ctx, fmt, outputs)
+        return await complete(client, body, ctx, fmt, outputs)
 
     return app
 
@@ -125,6 +125,7 @@ async def complete(
     client: httpx.AsyncClient,
     body: dict[str, Any],
     ctx: Context,
+    fmt: ModelFormat,
     output_guards: Sequence[OutputGuard],
 ) -> Response:
     try:
@@ -136,7 +137,8 @@ async def complete(
 
     data = upstream.json()
     reasoning = "\n".join(
-        extract_reasoning(choice.get("message") or {}) for choice in data.get("choices", [])
+        split_message(choice.get("message") or {}, fmt).reasoning
+        for choice in data.get("choices", [])
     )
     for guard in output_guards:
         data = guard.transform(data, reasoning, ctx)
@@ -147,6 +149,7 @@ async def stream_completion(
     client: httpx.AsyncClient,
     body: dict[str, Any],
     ctx: Context,
+    fmt: ModelFormat,
     output_guards: Sequence[OutputGuard],
 ) -> Response:
     try:
@@ -162,7 +165,9 @@ async def stream_completion(
 
     ctx.metadata["stream"] = True
     chunks: AsyncIterator[bytes] | AsyncIterator[str] = (
-        guarded_events(upstream, ctx, output_guards) if output_guards else upstream.aiter_bytes()
+        guarded_events(upstream, ctx, fmt, output_guards)
+        if output_guards
+        else upstream.aiter_bytes()
     )
     return StreamingResponse(
         close_after(chunks, upstream),
@@ -171,13 +176,16 @@ async def stream_completion(
 
 
 async def guarded_events(
-    upstream: httpx.Response, ctx: Context, output_guards: Sequence[OutputGuard]
+    upstream: httpx.Response,
+    ctx: Context,
+    fmt: ModelFormat,
+    output_guards: Sequence[OutputGuard],
 ) -> AsyncIterator[str]:
     """Run output guards on each server-sent event.
 
     Each guard sees one chunk plus all reasoning streamed so far, and may rewrite the chunk.
     """
-    reasoning = ""
+    choices: dict[int, StreamReasoning] = {}
     async for line in upstream.aiter_lines():
         if not line.startswith("data:"):
             if line:  # comments and "event:" fields pass through
@@ -189,7 +197,9 @@ async def guarded_events(
             continue
         chunk = json.loads(payload)
         for choice in chunk.get("choices", []):
-            reasoning += extract_reasoning(choice.get("delta") or {})
+            tracker = choices.setdefault(choice.get("index", 0), StreamReasoning(fmt))
+            tracker.feed(choice.get("delta") or {})
+        reasoning = "\n".join(tracker.reasoning for tracker in choices.values())
         for guard in output_guards:
             chunk = guard.transform(chunk, reasoning, ctx)
         yield f"data: {json.dumps(chunk)}\n\n"
