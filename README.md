@@ -35,7 +35,20 @@ unmimic serve --upstream http://localhost:11434/v1
 Then point any OpenAI-compatible client at `http://127.0.0.1:9000/v1` instead of the
 model. Settings can also come from environment variables: `UNMIMIC_UPSTREAM_URL`,
 `UNMIMIC_UPSTREAM_API_KEY`, `UNMIMIC_HOST`, `UNMIMIC_PORT`, and
-`UNMIMIC_OUTPUT_GUARDS` (JSON list, default `["leak_detector"]`).
+`UNMIMIC_OUTPUT_GUARDS` (JSON list, default `["leak_detector", "strip_reasoning"]`).
+
+## Reasoning stays hidden
+
+By default users receive only the answer: Unmimic removes reasoning fields
+(`reasoning_content`, `reasoning`), `<think>` blocks, and text before a "Final Answer:"
+marker. To let users see the model's reasoning, turn the strip transform off:
+
+```bash
+UNMIMIC_OUTPUT_GUARDS='["leak_detector"]' unmimic serve
+```
+
+If you swap the model behind an endpoint, re-run `unmimic init`: a stale format config can
+strip the wrong part of a reply.
 
 ## Leak detector
 

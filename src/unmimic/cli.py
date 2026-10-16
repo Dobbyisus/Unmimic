@@ -82,6 +82,7 @@ def serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     import unmimic.guards.output.leak_detector  # noqa: F401  (registers the plugin)
+    import unmimic.guards.output.transforms.strip  # noqa: F401  (registers the plugin)
     from unmimic.config import Settings
     from unmimic.plugins import registry
     from unmimic.proxy.app import create_app
