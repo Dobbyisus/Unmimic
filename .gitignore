@@ -1,6 +1,9 @@
 # --- Hard rules: never commit these ---
 # Full, current attack corpus (dual use). Only attacks/public/ is published.
 attacks/private/
+# Safety net: a "private" folder anywhere under attacks/ (e.g. one created by mistake
+# inside attacks/public/) is never committed either.
+attacks/**/private/
 # Datasets, traces, results, checkpoints
 data/
 # Keys and secrets

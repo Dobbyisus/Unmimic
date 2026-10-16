@@ -29,6 +29,8 @@ def load_families(*dirs: Path) -> list[Family]:
             continue
         for path in sorted(folder.glob("*.yaml")):
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or "family" not in data or not data.get("examples"):
+                raise ValueError(f"{path}: empty, or missing 'family' / 'examples'")
             examples = tuple(str(e) for e in data["examples"])
             families.append(Family(data["family"], data.get("description", ""), examples))
     names = [f.name for f in families]
