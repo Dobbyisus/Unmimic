@@ -81,6 +81,7 @@ def init(args: argparse.Namespace) -> int:
 def serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    import unmimic.guards.input.extraction  # noqa: F401  (registers the plugin)
     import unmimic.guards.output.leak_detector  # noqa: F401  (registers the plugin)
     import unmimic.guards.output.transforms.strip  # noqa: F401  (registers the plugin)
     from unmimic.config import Settings
@@ -93,15 +94,24 @@ def serve(args: argparse.Namespace) -> int:
     host = args.host or settings.host
     port = args.port or settings.port
     formats = load_formats(settings.data_dir / "models")
+
+    inputs = []
+    for name in settings.input_guards:
+        try:
+            inputs.append(registry.create("input", name))
+        except (ImportError, ValueError) as exc:
+            print(f"WARNING: input guard {name} is OFF: {exc}", file=sys.stderr)
     outputs = [registry.create("output", name) for name in settings.output_guards]
     app = create_app(
         upstream,
+        input_guards=inputs,
         output_guards=outputs,
         upstream_api_key=settings.upstream_api_key,
         formats=formats,
     )
     print(f"Unmimic proxy on http://{host}:{port}/v1 -> {upstream}", file=sys.stderr)
     print(f"Model formats loaded: {', '.join(formats) or 'none'}", file=sys.stderr)
+    print(f"Input guards: {', '.join(g.name for g in inputs) or 'none'}", file=sys.stderr)
     print(f"Output guards: {', '.join(settings.output_guards) or 'none'}", file=sys.stderr)
     uvicorn.run(app, host=host, port=port)
     return 0

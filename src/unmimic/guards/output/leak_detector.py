@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from unmimic.embeddings import DEFAULT_MODEL, load_embedder
 from unmimic.guards.output.decoders import decode_base64, decode_variants
 from unmimic.plugins import Context, registry
 from unmimic.reasoning import DEFAULT_FORMAT, ModelFormat, split_text
@@ -29,7 +30,7 @@ NGRAM = 8
 # An exact score this high is conclusive, so the slower meaning check is skipped.
 EXACT_CUTOFF = 0.3
 DEFAULT_THRESHOLD = 0.3
-DEFAULT_SEMANTIC_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+DEFAULT_SEMANTIC_MODEL = DEFAULT_MODEL
 # Cosine similarity at which two sentences count as the same statement. Measured on the
 # default model: translations score 0.8-0.99, close paraphrases 0.75-0.85.
 SIMILAR = 0.75
@@ -71,9 +72,7 @@ class SemanticMatcher:
     """Meaning overlap using a multilingual sentence-embedding model."""
 
     def __init__(self, model_name: str = DEFAULT_SEMANTIC_MODEL) -> None:
-        from sentence_transformers import SentenceTransformer
-
-        self.model = SentenceTransformer(model_name)
+        self.model = load_embedder(model_name)  # shared with the input guard
         self._cached: tuple[str, Any] | None = None
 
     def _reasoning_embeddings(self, reasoning: str) -> Any:

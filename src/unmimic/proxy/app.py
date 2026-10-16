@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
@@ -19,6 +20,8 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from unmimic.plugins import Context, InputGuard, OutputGuard
 from unmimic.reasoning import DEFAULT_FORMAT, ModelFormat, StreamReasoning, split_message
+
+log = logging.getLogger(__name__)
 
 ANONYMOUS = "anonymous"
 UPSTREAM_TIMEOUT = httpx.Timeout(10.0, read=600.0)
@@ -105,6 +108,16 @@ def create_app(
         ctx = Context(account_id=account_id_from(request), model=str(body.get("model", "")))
         for guard in inputs:
             verdict = guard.check(body, ctx)
+            if verdict.action != "allow":
+                log.warning(
+                    "request %s: account=%s model=%s guard=%s score=%.2f %s",
+                    "blocked" if verdict.action == "block" else "flagged",
+                    ctx.account_id,
+                    ctx.model,
+                    guard.name,
+                    verdict.score,
+                    verdict.reason,
+                )
             if verdict.action == "block":
                 # Deliberately vague: telling attackers which guard fired helps them tune.
                 return error_response(403, "request blocked by Unmimic", "unmimic_blocked")

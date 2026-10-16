@@ -1,7 +1,6 @@
 """Runtime settings, read from environment variables prefixed ``UNMIMIC_``.
 
-The per-model config file (where a model puts its reasoning, calibrated thresholds)
-is added together with the format probe in ``adapt/probe.py``.
+Per-model reasoning formats live separately, in ``data/models/`` (see ``reasoning.py``).
 """
 
 from __future__ import annotations
@@ -17,9 +16,16 @@ class Settings(BaseSettings):
     upstream_url: str = "http://localhost:11434/v1"
     # Key the proxy sends to the upstream model. Callers' own keys are never forwarded.
     upstream_api_key: str | None = None
-    # Output guards `unmimic serve` turns on, by registry name, run in this order. The leak
+    # Guards `unmimic serve` turns on, by registry name, run in this order. The leak
     # detector must come before the strip transform. Env: UNMIMIC_OUTPUT_GUARDS='[...]'
+    input_guards: list[str] = ["extraction_guard"]
     output_guards: list[str] = ["leak_detector", "strip_reasoning"]
+    # What the input guard learns from: attack families, and normal prompts.
+    attack_dirs: list[Path] = [Path("attacks/public"), Path("attacks/private")]
+    benign_files: list[Path] = [
+        Path("data/benign/wildchat_train.jsonl"),
+        Path("benign/hard_negatives.yaml"),
+    ]
     host: str = "127.0.0.1"
     port: int = 9000
     data_dir: Path = Path("data")
