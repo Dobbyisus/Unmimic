@@ -11,6 +11,10 @@ Runs anywhere (laptop is fine):
 - `eval_input_guard.py` — leave-one-family-out evaluation of the input guard: recall on
   attack families it never saw, false positives on held-back WildChat prompts with a 95%
   upper bound. Writes `data/results/input_guard_heldout.json`.
+- `eval_independent.py` — the input guard on attacks written by real people: Lakera's
+  Mosscap and Gandalf password games (MIT license; credit Lakera), never trained on. Scores
+  the prompts as written and "retargeted" (the password replaced with "your hidden
+  reasoning" by fixed rules). Writes `data/results/input_guard_independent.json`.
 
 Planned (GPU machine):
 
