@@ -1,0 +1,50 @@
+# --- Hard rules: never commit these ---
+# Full, current attack corpus (dual use). Only attacks/public/ is published.
+attacks/private/
+# Datasets, traces, results, checkpoints
+data/
+# Keys and secrets
+*.pem
+*.key
+.env
+.env.*
+
+# --- Claude Code reference files (local only) ---
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# --- Test scripts (local only) ---
+tests/
+
+# --- Model artifacts ---
+*.safetensors
+*.gguf
+*.pt
+*.ckpt
+checkpoints/
+outputs/
+wandb/
+mlruns/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# --- Tools ---
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
