@@ -14,7 +14,18 @@ It does four things:
    attacks the model to find what works, and calibrates thresholds to a target
    false-positive rate.
 
-> **Status:** early development. The project skeleton exists; the guards do not yet.
+> **Status:** early development. The proxy runs as a passthrough with slots for guards;
+> the guards themselves do not exist yet.
+
+## Run the proxy
+
+```bash
+unmimic serve --upstream http://localhost:11434/v1
+```
+
+Then point any OpenAI-compatible client at `http://127.0.0.1:9000/v1` instead of the
+model. Settings can also come from environment variables: `UNMIMIC_UPSTREAM_URL`,
+`UNMIMIC_UPSTREAM_API_KEY`, `UNMIMIC_HOST`, `UNMIMIC_PORT`.
 
 ## Install (development)
 

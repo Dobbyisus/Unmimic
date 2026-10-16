@@ -30,18 +30,41 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--fpr", type=float, default=0.001)
 
     serve = sub.add_parser("serve", help="run the protecting proxy")
-    serve.add_argument("--port", type=int, default=9000)
-    serve.add_argument("--upstream", help="upstream model base URL")
+    serve.add_argument("--upstream", help="upstream model base URL (default: UNMIMIC_UPSTREAM_URL)")
+    serve.add_argument("--host", help="interface to listen on (default: 127.0.0.1)")
+    serve.add_argument("--port", type=int, help="port to listen on (default: 9000)")
 
     sub.add_parser("audit", help="measure how distillable the model's outputs are")
 
     return parser
 
 
+def serve(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from unmimic.config import Settings
+    from unmimic.proxy.app import create_app
+
+    settings = Settings()
+    upstream = args.upstream or settings.upstream_url
+    host = args.host or settings.host
+    port = args.port or settings.port
+    app = create_app(upstream, upstream_api_key=settings.upstream_api_key)
+    print(f"Unmimic proxy on http://{host}:{port}/v1 -> {upstream}", file=sys.stderr)
+    uvicorn.run(app, host=host, port=port)
+    return 0
+
+
+COMMANDS = {"serve": serve}
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    print(f"unmimic {args.command}: not implemented yet", file=sys.stderr)
-    return NOT_IMPLEMENTED
+    command = COMMANDS.get(args.command)
+    if command is None:
+        print(f"unmimic {args.command}: not implemented yet", file=sys.stderr)
+        return NOT_IMPLEMENTED
+    return command(args)
 
 
 if __name__ == "__main__":
