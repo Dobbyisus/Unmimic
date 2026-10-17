@@ -36,7 +36,7 @@ for dataset in gsm8k math500; do
   [ "$dataset" = gsm8k ] && limit=(--limit "$GSM8K_LIMIT")
   echo "=== $dataset started $(date -u) ${limit[*]}"
   python experiments/teacher_gen.py --endpoint http://localhost:8000/v1 --model teacher \
-    --dataset "$dataset" --max-tokens 7800 --concurrency 32 "${limit[@]}"
+    --dataset "$dataset" --max-tokens 7800 --concurrency 32 --timeout 3600 "${limit[@]}"
   echo "=== $dataset finished $(date -u)"
 done
 echo "ALL DONE $(date -u)"
