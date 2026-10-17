@@ -118,10 +118,15 @@ def probe(
     client: httpx.Client,
     model: str,
     samples: int = len(PROMPTS),
-    max_tokens: int = 1024,
+    max_tokens: int = 4096,
     on_reply: Callable[[int, int], None] | None = None,
 ) -> ModelFormat:
-    """Ask ``samples`` ordinary questions and return the format the replies agree on."""
+    """Ask ``samples`` ordinary questions and return the format the replies agree on.
+
+    A reply cut off by ``max_tokens`` before showing any reasoning marker says nothing
+    about the format (a model whose chat template opens ``<think>`` may not have reached
+    ``</think>`` yet), so it is left out of the vote rather than counted as "none".
+    """
     prompts = PROMPTS[: max(1, min(samples, len(PROMPTS)))]
     observations = []
     for done, prompt in enumerate(prompts, start=1):
@@ -134,9 +139,17 @@ def probe(
             },
         )
         response.raise_for_status()
-        observations.append(observe(response.json()["choices"][0]["message"]))
+        choice = response.json()["choices"][0]
+        observed = observe(choice["message"])
+        if not (choice.get("finish_reason") == "length" and observed.kind == "none"):
+            observations.append(observed)
         if on_reply:
             on_reply(done, len(prompts))
+    if not observations:
+        raise ProbeError(
+            f"every reply was cut off at {max_tokens} tokens before showing its format; "
+            "raise --max-tokens"
+        )
     return vote(model, observations)
 
 

@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     upstream_url: str = "http://localhost:11434/v1"
     # Key the proxy sends to the upstream model. Callers' own keys are never forwarded.
     upstream_api_key: str | None = None
+    # Seconds to wait for the model's reply; reasoning models can take many minutes.
+    upstream_timeout: float = 3600.0
     # Guards `unmimic serve` turns on, by registry name, run in this order. The leak
     # detector must come before the strip transform. Env: UNMIMIC_OUTPUT_GUARDS='[...]'
     input_guards: list[str] = ["extraction_guard"]

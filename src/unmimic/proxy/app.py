@@ -24,7 +24,9 @@ from unmimic.reasoning import DEFAULT_FORMAT, ModelFormat, StreamReasoning, spli
 log = logging.getLogger(__name__)
 
 ANONYMOUS = "anonymous"
-UPSTREAM_TIMEOUT = httpx.Timeout(10.0, read=600.0)
+# Reasoning models can think for many minutes before replying (DeepSeek-R1 ~8k tokens at
+# ~20 tok/s per request on one GPU), so the default read timeout is an hour.
+DEFAULT_UPSTREAM_TIMEOUT = 3600.0
 
 
 def account_id_from(request: Request) -> str:
@@ -61,13 +63,15 @@ def create_app(
     output_guards: Iterable[OutputGuard] = (),
     upstream_api_key: str | None = None,
     formats: Mapping[str, ModelFormat] | None = None,
+    upstream_timeout: float = DEFAULT_UPSTREAM_TIMEOUT,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> FastAPI:
     """Build the proxy.
 
     ``formats`` maps model names to where each puts its reasoning (written by
-    ``unmimic init``); unknown models use ``DEFAULT_FORMAT``. ``transport`` replaces the
-    network, for tests.
+    ``unmimic init``); unknown models use ``DEFAULT_FORMAT``. ``upstream_timeout`` is how
+    long to wait for the model's reply, in seconds. ``transport`` replaces the network, for
+    tests.
     """
     inputs = list(input_guards)
     outputs = list(output_guards)
@@ -79,7 +83,7 @@ def create_app(
         async with httpx.AsyncClient(
             base_url=upstream_url.rstrip("/"),
             headers=headers,
-            timeout=UPSTREAM_TIMEOUT,
+            timeout=httpx.Timeout(10.0, read=upstream_timeout),
             transport=transport,
         ) as client:
             app.state.client = client

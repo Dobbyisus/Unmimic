@@ -42,9 +42,16 @@ def main() -> None:
     parser.add_argument("--out-dir", type=Path, default=Path("data/students/models"))
     parser.add_argument("--epochs", type=float, default=2.0)
     parser.add_argument("--lr", type=float, default=2e-4)
-    parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--grad-accum", type=int, default=4)
-    parser.add_argument("--max-seq-length", type=int, default=2048)
+    # Teacher replies run to ~7,800 tokens, so examples are long: batch 1 x 16 accumulation
+    # keeps the effective batch at 16 while fitting a 24 GB GPU.
+    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--grad-accum", type=int, default=16)
+    parser.add_argument(
+        "--max-seq-length",
+        type=int,
+        default=8192,
+        help="longer examples are dropped, not truncated (truncation cuts off the answer)",
+    )
     parser.add_argument("--lora-r", type=int, default=16)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--limit", type=int, default=None, help="use only N samples (smoke test)")
@@ -68,15 +75,28 @@ def main() -> None:
         dataset = dataset.select(range(min(args.limit, len(dataset))))
 
     def to_text(row: dict) -> dict:
-        return {"text": tokenizer.apply_chat_template(row["messages"], tokenize=False)}
+        text = tokenizer.apply_chat_template(row["messages"], tokenize=False)
+        # Base checkpoints' templates may not end the reply with EOS; without it the
+        # student never learns to stop after the answer.
+        if tokenizer.eos_token and not text.rstrip().endswith(tokenizer.eos_token):
+            text = text.rstrip() + tokenizer.eos_token
+        return {"text": text}
 
-    dataset = dataset.map(to_text, remove_columns=dataset.column_names)
-    lengths = [len(tokenizer(t).input_ids) for t in dataset["text"][:200]]
-    print(
-        f"{len(dataset)} samples; first-200 token length "
-        f"mean {sum(lengths) / len(lengths):.0f} max {max(lengths)} "
-        f"(truncating at {args.max_seq_length})"
+    dataset = dataset.map(
+        lambda row: {**to_text(row), "id": row["id"]}, remove_columns=dataset.column_names
     )
+    dataset = dataset.map(lambda row: {"tokens": len(tokenizer(row["text"]).input_ids)})
+    too_long = [
+        i for i, n in zip(dataset["id"], dataset["tokens"], strict=True) if n > args.max_seq_length
+    ]
+    dataset = dataset.filter(lambda row: row["tokens"] <= args.max_seq_length)
+    lengths = sorted(dataset["tokens"])
+    print(
+        f"{len(dataset)} samples kept, {len(too_long)} dropped as longer than "
+        f"{args.max_seq_length} tokens; length median {lengths[len(lengths) // 2]} "
+        f"max {lengths[-1]}"
+    )
+    dataset = dataset.remove_columns(["id", "tokens"])
 
     run_dir = args.out_dir / f"{args.data.stem}-{args.base_model.split('/')[-1]}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -120,6 +140,7 @@ def main() -> None:
                 "data": str(args.data),
                 "base_model": args.base_model,
                 "samples": len(dataset),
+                "dropped_too_long": too_long,
                 "epochs": args.epochs,
                 "lr": args.lr,
                 "effective_batch": args.batch_size * args.grad_accum,

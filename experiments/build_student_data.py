@@ -18,12 +18,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from unmimic.guards.output.leak_detector import NOTICE, LeakGuard
 from unmimic.guards.output.transforms.strip import StripReasoning
 from unmimic.plugins import Context
 from unmimic.reasoning import ModelFormat
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from teacher_gen import INSTRUCTION  # noqa: E402  (the prompt the teacher was given)
 
 # How the teacher marks its reasoning (DeepSeek-R1: the template opens <think> itself).
 TEACHER_FORMAT = ModelFormat(
@@ -58,14 +62,28 @@ def through_unmimic(trace: dict, leak: LeakGuard, strip: StripReasoning) -> tupl
 
 
 def sample(trace: dict, target: str, condition: str) -> dict:
+    # The user turn is exactly what the copier sent the teacher, and what eval_student.py
+    # asks the students, so training and testing use the same prompt.
     return {
         "id": trace["id"],
         "condition": condition,
         "messages": [
-            {"role": "user", "content": trace["question"]},
+            {"role": "user", "content": f"{trace['question']}\n\n{INSTRUCTION}"},
             {"role": "assistant", "content": target},
         ],
     }
+
+
+def garbled(trace: dict) -> bool:
+    """Teacher glitches: text that wasn't valid UTF-8, or several </think> in one reply.
+
+    Traces saved as byte-level tokenizer symbols must be repaired first
+    (experiments/repair_traces.py); unrepaired ones are refused rather than trained on.
+    """
+    raw = trace.get("raw_output", "")
+    if " " not in raw and ("Ġ" in raw or "Ċ" in raw):
+        raise SystemExit("traces are still byte-level text; run experiments/repair_traces.py")
+    return trace.get("decode_error", False) or raw.count("</think>") > 1
 
 
 def main() -> None:
@@ -91,16 +109,16 @@ def main() -> None:
     args = parser.parse_args()
 
     traces = read_traces(args.traces)
-    usable = [
-        t
-        for t in traces
-        if t.get("visible_answer", "").strip()
-        and t.get("reasoning", "").strip()
-        and (not args.correct_only or t.get("correct"))
+    complete = [
+        t for t in traces if t.get("visible_answer", "").strip() and t.get("reasoning", "").strip()
     ]
+    clean = [t for t in complete if not garbled(t)]
+    usable = [t for t in clean if not args.correct_only or t.get("correct")]
     print(
-        f"{len(traces)} traces, {len(usable)} usable"
-        + (" (correct only)" if args.correct_only else "")
+        f"{len(traces)} traces: {len(traces) - len(complete)} never reached an answer, "
+        f"{len(complete) - len(clean)} garbled, "
+        + (f"{len(clean) - len(usable)} wrong answers dropped, " if args.correct_only else "")
+        + f"{len(usable)} usable"
     )
     if not usable:
         raise SystemExit("no usable traces; check the teacher run finished")

@@ -12,10 +12,14 @@ if [ -f data/traces/teacher_gsm8k.jsonl ] && [ ! -f data/traces/teacher_gsm8k_pi
   mv data/traces/teacher_gsm8k.jsonl data/traces/teacher_gsm8k_pilot.jsonl
 fi
 
-# Serve the teacher if it isn't already (e.g. after a reboot).
+# Serve the teacher if it isn't already (e.g. after a reboot). transformers 5.x loads this
+# model's tokenizer wrongly (prompts mis-split, output as "AlbertĠbuys"), so vLLM gets a
+# corrected copy; the script refuses to continue if the corrected copy fails its checks.
 if ! curl -s localhost:8000/v1/models | grep -q teacher; then
+  python infra/aws/fix_teacher_tokenizer.py --out ~/teacher-tokenizer || exit 1
   echo "starting vLLM $(date -u)"
   nohup vllm serve deepseek-ai/DeepSeek-R1-0528-Qwen3-8B --served-model-name teacher \
+    --tokenizer ~/teacher-tokenizer \
     --max-model-len 8192 --gpu-memory-utilization 0.92 --port 8000 > ~/vllm_teacher.log 2>&1 &
   until curl -s localhost:8000/v1/models | grep -q teacher; do
     sleep 20

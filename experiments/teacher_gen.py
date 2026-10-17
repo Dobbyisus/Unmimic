@@ -34,6 +34,8 @@ FORMAT = ModelFormat(kind="tag", open_tag="<think>", close_tag="</think>", impli
 DATASETS = {
     # name: (repo, file, question field, answer field, max new tokens)
     "gsm8k": ("openai/gsm8k", "main/train-00000-of-00001.parquet", "question", "answer", 4096),
+    # GSM8K's held-out test split (1,319): the students' benchmark, never trained on.
+    "gsm8k_test": ("openai/gsm8k", "main/test-00000-of-00001.parquet", "question", "answer", 4096),
     "math500": ("HuggingFaceH4/MATH-500", "test.jsonl", "problem", "answer", 7168),
 }
 
@@ -54,7 +56,7 @@ def load_problems(name: str) -> list[dict]:
     problems = []
     for i, row in enumerate(rows):
         reference = row[a_field]
-        if name == "gsm8k":
+        if name.startswith("gsm8k"):
             reference = reference.split("####")[-1].strip()
         problems.append({"id": f"{name}-{i}", "question": row[q_field], "reference": reference})
     return problems

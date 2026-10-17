@@ -23,7 +23,12 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--endpoint", required=True, help="OpenAI-compatible base URL")
     init.add_argument("--model", help="model to probe (default: the only model served)")
     init.add_argument("--samples", type=int, default=20, help="questions to ask (max 20)")
-    init.add_argument("--max-tokens", type=int, default=1024, help="reply length limit")
+    init.add_argument(
+        "--max-tokens",
+        type=int,
+        default=4096,
+        help="reply length limit; reasoning models need room to reach their closing tag",
+    )
 
     redteam = sub.add_parser("redteam", help="attack the model and record what leaks")
     redteam.add_argument("--rounds", type=int, default=3)
@@ -108,6 +113,7 @@ def serve(args: argparse.Namespace) -> int:
         output_guards=outputs,
         upstream_api_key=settings.upstream_api_key,
         formats=formats,
+        upstream_timeout=settings.upstream_timeout,
     )
     print(f"Unmimic proxy on http://{host}:{port}/v1 -> {upstream}", file=sys.stderr)
     print(f"Model formats loaded: {', '.join(formats) or 'none'}", file=sys.stderr)
