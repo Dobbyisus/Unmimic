@@ -4,6 +4,12 @@ attacks/private/
 # Safety net: a "private" folder anywhere under attacks/ (e.g. one created by mistake
 # inside attacks/public/) is never committed either.
 attacks/**/private/
+# ...and an attacks/ folder anywhere else in the repo (e.g. experiments/attacks/private/).
+**/attacks/private/
+**/attacks/**/private/
+# Attack generation and execution scripts (dual use): local only, never committed.
+experiments/generate_private_corpus.py
+experiments/run_experiment1.py
 # Datasets, traces, results, checkpoints
 data/
 # Keys and secrets
