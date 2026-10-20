@@ -57,10 +57,12 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=None, help="use only N samples (smoke test)")
     args = parser.parse_args()
 
+    import math
+
     import torch
     from datasets import load_dataset
-    from peft import LoraConfig
-    from transformers import AutoTokenizer
+    from peft import LoraConfig, get_peft_model
+    from transformers import AutoModelForCausalLM, AutoTokenizer
     from trl import SFTConfig, SFTTrainer
 
     tokenizer = AutoTokenizer.from_pretrained(args.base_model)
@@ -101,6 +103,28 @@ def main() -> None:
     run_dir = args.out_dir / f"{args.data.stem}-{args.base_model.split('/')[-1]}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    # TRL 1.x no longer takes peft_config: attach the LoRA adapter to the model first.
+    bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    model = AutoModelForCausalLM.from_pretrained(
+        args.base_model, dtype=torch.bfloat16 if bf16 else torch.float32
+    )
+    model = get_peft_model(
+        model,
+        LoraConfig(
+            r=args.lora_r,
+            lora_alpha=args.lora_r * 2,
+            lora_dropout=0.05,
+            target_modules=LORA_TARGETS,
+            task_type="CAUSAL_LM",
+        ),
+    )
+    model.enable_input_require_grads()  # gradient checkpointing with a frozen base model
+    model.print_trainable_parameters()
+
+    # transformers 5.x dropped warmup_ratio; 3% of all optimizer steps, as a step count.
+    total_steps = math.ceil(len(dataset) / (args.batch_size * args.grad_accum)) * args.epochs
+    warmup_steps = max(1, round(0.03 * total_steps))
+
     config = SFTConfig(
         output_dir=str(run_dir),
         num_train_epochs=args.epochs,
@@ -108,27 +132,21 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         max_length=args.max_seq_length,
-        bf16=torch.cuda.is_bf16_supported(),
+        bf16=bf16,
         logging_steps=20,
         save_strategy="no",
-        report_to=[],
+        report_to="none",
         seed=args.seed,
         gradient_checkpointing=True,
         lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
+        warmup_steps=warmup_steps,
         dataset_text_field="text",
     )
     trainer = SFTTrainer(
-        model=args.base_model,
+        model=model,
         args=config,
         train_dataset=dataset,
-        peft_config=LoraConfig(
-            r=args.lora_r,
-            lora_alpha=args.lora_r * 2,
-            lora_dropout=0.05,
-            target_modules=LORA_TARGETS,
-            task_type="CAUSAL_LM",
-        ),
+        processing_class=tokenizer,
     )
     result = trainer.train()
     trainer.save_model(str(run_dir))

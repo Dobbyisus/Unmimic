@@ -32,10 +32,13 @@ fi
 SYNC=$!
 trap 'kill $SYNC 2>/dev/null; bash infra/aws/sync_s3.sh' EXIT
 
-# GSM8K_LIMIT: how many GSM8K problems to solve (default 3000 of 7473). The run is
+# TEACHER_DATASETS: which teacher_gen datasets to run, in order (default: the training
+# traces). E.g. TEACHER_DATASETS=gsm8k_test for the teacher's reference score.
+# GSM8K_LIMIT: how many GSM8K training problems to solve (default 3000 of 7473). The run is
 # resumable, so raising it later only solves the extra problems.
+TEACHER_DATASETS=${TEACHER_DATASETS:-gsm8k}
 GSM8K_LIMIT=${GSM8K_LIMIT:-3000}
-for dataset in gsm8k math500; do
+for dataset in $TEACHER_DATASETS; do
   limit=()
   [ "$dataset" = gsm8k ] && limit=(--limit "$GSM8K_LIMIT")
   echo "=== $dataset started $(date -u) ${limit[*]}"

@@ -34,9 +34,13 @@ DEFAULT_SEMANTIC_MODEL = DEFAULT_MODEL
 # Cosine similarity at which two sentences count as the same statement. Measured on the
 # default model: translations score 0.8-0.99, close paraphrases 0.75-0.85.
 SIMILAR = 0.75
-# Honest answers restate one reasoning sentence (usually the conclusion) all the time, so
-# fewer matches than this scores 0.
-MIN_MATCHED_SENTENCES = 2
+# Honest answers restate the solution's steps, so the meaning check needs this many
+# reasoning sentences reproduced (one-to-one) before it counts anything. Measured on real
+# DeepSeek-R1 GSM8K answers: honest answers matched at most 14 (reasoning median 111
+# sentences); a copied reasoning matches most of it. Cost: a translated copy of reasoning
+# shorter than this can't be caught by meaning (verbatim/encoded copies still are, by the
+# exact check).
+MIN_MATCHED_SENTENCES = 20
 NOTICE = "This response was withheld by Unmimic."
 # While streaming, re-check after this many new answer characters (and at the end).
 STREAM_CHECK_CHARS = 80
@@ -84,15 +88,37 @@ class SemanticMatcher:
         return self._cached[1]
 
     def overlap(self, answer: str, reasoning: str) -> float:
+        """Share of reasoning sentences reproduced in the answer, matched one-to-one.
+
+        One-to-one matters: reasoning models restate the same step many times ("2 x 16 =
+        32 slices" five times over), so if one answer sentence could match every repeat, an
+        honest answer that states each step once would cover much of the reasoning. On
+        3,000 real DeepSeek-R1 answers that many-to-one score withheld 42% of honest replies.
+        """
         targets = self._reasoning_embeddings(reasoning)
         found = sentences(answer)
         if targets is None or not found:
             return 0.0
         candidates = self.model.encode(found, normalize_embeddings=True)
-        matched = int(((targets @ candidates.T).max(axis=1) >= SIMILAR).sum())
+        matched = one_to_one_matches(targets @ candidates.T, SIMILAR)
         if matched < MIN_MATCHED_SENTENCES:
             return 0.0
         return matched / len(targets)
+
+
+def one_to_one_matches(similarity: Any, threshold: float) -> int:
+    """Greedy one-to-one pairing of rows and columns at or above ``threshold``."""
+    import numpy as np
+
+    rows, cols = np.nonzero(similarity >= threshold)
+    used_rows: set[int] = set()
+    used_cols: set[int] = set()
+    for k in np.argsort(-similarity[rows, cols], kind="stable"):
+        r, c = int(rows[k]), int(cols[k])
+        if r not in used_rows and c not in used_cols:
+            used_rows.add(r)
+            used_cols.add(c)
+    return len(used_rows)
 
 
 def load_matcher(model_name: str) -> SemanticMatcher | None:

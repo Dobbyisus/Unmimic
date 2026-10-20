@@ -14,8 +14,11 @@ It does four things:
    attacks the model to find what works, and calibrates thresholds to a target
    false-positive rate.
 
-> **Status:** early development. The proxy runs as a passthrough with slots for guards;
-> the guards themselves do not exist yet.
+> **Status:** early development. Working and tested on a real reasoning model: the proxy,
+> the format probe (`unmimic init`), the input guard, the leak detector and reasoning
+> stripping. Not built yet: account watch, the red-team step and calibration
+> (`unmimic redteam`, `unmimic calibrate`). Thresholds are defaults until calibration
+> exists.
 
 ## Run the proxy
 
@@ -74,6 +77,104 @@ downloads a ~470 MB multilingual embedding model on first use):
 ```bash
 pip install -e ".[ml]"
 ```
+
+## Results so far
+
+All rates come with a 95% interval (Clopper-Pearson, or a paired bootstrap for
+differences). The protected model in every test is
+[DeepSeek-R1-0528-Qwen3-8B](https://huggingface.co/deepseek-ai/DeepSeek-R1-0528-Qwen3-8B),
+served with vLLM on one A10G GPU.
+
+### Output guards on real model output
+
+Over 3,000 of the model's replies to GSM8K math problems
+(`experiments/check_real_outputs.py`):
+
+| Check | Result |
+|---|---|
+| Reasoning format found by `unmimic init` | `<think>` tags, 3,000 / 3,000 replies |
+| Strip leaves exactly the visible answer | 2,769 / 2,772 complete replies (the 3 others are garbled model output) |
+| Honest answers withheld by the leak detector (meaning check) | 0 / 2,607 (at most 0.11%) |
+| Honest answers withheld by the exact-copy check | 1 / 2,607: the model itself copied 41% of its reasoning into that answer, a real leak |
+
+The first version of the meaning check withheld 42% of honest answers on this model, a
+problem synthetic tests never showed: DeepSeek-R1 repeats each step many times, so one
+honest summary sentence matched every repeat. Matching sentences one to one and requiring
+at least 20 matched sentences fixed it.
+
+### Input guard
+
+Held-out test (`experiments/eval_input_guard.py`): each attack type is left out of training
+in turn and the guard is tested on it, so these are attack types it has never seen.
+135 attacks of 11 types; 10,000 real user prompts from WildChat-1M that were never trained on.
+
+| | Result |
+|---|---|
+| Unseen attack types blocked | 22.2% [15.5–30.2] |
+| Unseen attack types blocked or flagged | 90.4% [84.1–94.8] |
+| Normal prompts blocked | 0.03% (at most 0.08%) |
+| Normal prompts flagged (allowed, logged) | 1.5% |
+
+Independent test on Lakera's [Mosscap](https://huggingface.co/datasets/Lakera/mosscap_prompt_injection)
+and [Gandalf](https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions) prompt-injection
+sets (MIT), never used for training (`experiments/eval_independent.py`). As written they try
+to steal a password, and the guard blocks almost none of them (0.02% and 0.2%): it targets
+reasoning extraction, not suspicious prompts in general. With "the password" replaced by
+"your hidden reasoning" (the rest of each prompt unchanged), 95.8% [94.9–96.6] of Mosscap
+(n = 2,112) and 98.9% [97.2–99.7] of Gandalf (n = 363) are blocked or flagged.
+
+With all guards on, the proxy added 34 ms at the median on a CPU in a live test with
+short replies; on long real reasoning the meaning check is much slower (see Limitations).
+
+### Does hiding reasoning stop a copycat?
+
+To test this we trained copycat students on the protected model's answers to 3,000 GSM8K
+problems and tested them on GSM8K's 1,319 test problems (none seen in training):
+**A** learned from the full replies, reasoning included. **B** learned only from what
+passed through Unmimic. **Student 0** is the same base model with no training, to show
+what it already knew. LoRA fine-tuning, identical settings for A and B
+(`experiments/build_student_data.py`, `train_student.py`, `eval_student.py`,
+`compare_students.py`).
+
+| Copycat base model | Untrained | A: full reasoning | B: through Unmimic |
+|---|---|---|---|
+| Qwen2.5-1.5B | 58.7% [56.0–61.4] | 63.2% [60.5–65.8] (+4.5) | 64.3% [61.6–66.9] (+5.6) |
+| Qwen2.5-0.5B | 28.6% [26.2–31.1] | 29.6% [27.1–32.1] (+1.0, not significant) | 40.2% [37.5–42.9] (+11.6) |
+
+The protected model itself scores 86.1% [83.8–88.2] (on the first 1,001 test problems).
+
+What this shows: **small copycats (up to 1.5B) don't learn from long hidden reasoning.**
+The model's reasoning averages ~3,100 tokens; Student A copies its style, loops, and in
+18–37% of problems runs out of room before answering. Both copycats learn mostly from the
+short worked solution the model writes after its reasoning, which Unmimic does not remove.
+So against small copycats, hiding the reasoning gives no protection (on 0.5B the copy made
+through Unmimic is better), in line with
+[Li et al., 2025, "Small Models Struggle to Learn from Strong Reasoners"](https://arxiv.org/abs/2502.12143).
+Larger copycats (7B and up) are known to benefit from reasoning traces, so hiding it should
+matter more there; we have not tested that yet. Account watch is meant to address the
+case hiding reasoning can't.
+
+### Limitations
+
+- Copycats were tested only up to 1.5B, on grade-school math.
+- All attacks used for training and the held-out test were written by one person.
+- The meaning check embeds every reasoning sentence and takes 2–3 s per reply on a CPU,
+  far over the 50 ms budget; it needs a GPU or a cheaper pre-filter before inline use.
+- A tokenizer bug (transformers 5.x loaded the model's tokenizer as the wrong class) meant
+  the protected model read slightly mis-split prompts when generating the training data, so
+  its own scores are likely understated. Both copycats learned from the same replies, so
+  the A/B comparison is unaffected. Fixed for later runs (`infra/aws/fix_teacher_tokenizer.py`).
+
+## Data and credits
+
+- [WildChat-1M](https://huggingface.co/datasets/allenai/WildChat-1M) by Ai2 (ODC-BY):
+  normal user prompts.
+- [GSM8K](https://huggingface.co/datasets/openai/gsm8k) (MIT): math problems for the copycat test.
+- [Lakera Mosscap and Gandalf](https://huggingface.co/Lakera) (MIT): independent attack test.
+- Models: DeepSeek-R1-0528-Qwen3-8B (MIT) as the protected model; Qwen2.5-0.5B / 1.5B
+  (Apache-2.0) as copycats;
+  [paraphrase-multilingual-MiniLM-L12-v2](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2)
+  (Apache-2.0) for embeddings.
 
 ## Install (development)
 

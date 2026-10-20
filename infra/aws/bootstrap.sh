@@ -28,7 +28,12 @@ if [ "$idle" -ge "$IDLE_LIMIT" ]; then
 fi
 SHUTDOWN
 chmod +x /usr/local/bin/unmimic-autoshutdown
-echo '*/5 * * * * root /usr/local/bin/unmimic-autoshutdown' > /etc/cron.d/unmimic-autoshutdown
+# The idle count lives on disk; without the @reboot reset, minutes counted before a stop
+# carry over and a restarted machine can shut itself down within 5 minutes.
+cat > /etc/cron.d/unmimic-autoshutdown <<'CRON'
+@reboot root echo 0 > /var/lib/unmimic-idle-minutes
+*/5 * * * * root /usr/local/bin/unmimic-autoshutdown
+CRON
 
 # 2. Python 3.12 environment with vLLM, for the ubuntu user (uv fetches Python itself).
 command -v pip3 >/dev/null || { apt-get update -y && apt-get install -y python3-pip; }
