@@ -16,6 +16,15 @@ harvesting the model's step-by-step reasoning to train a cheaper copy.
 > model; see [Results](#results-so-far), including what it does *not* protect against.
 > Thresholds are defaults until calibration exists.
 
+## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/flow-dark.svg">
+  <img alt="A request passes the input guard, reaches the model; the reply's reasoning is split from the answer, checked by the leak detector and stripped, so the user gets the answer only." src="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/flow-light.svg" width="720">
+</picture>
+
+Two checkpoints: the input guard stops extraction attempts before they reach the model, and the output guards make sure the hidden reasoning never leaves, even when an attack talks the model into repeating it in its answer.
+
 ## Install
 
 ```bash
@@ -123,6 +132,12 @@ at least 20 matched sentences fixed it.
 
 ### Input guard
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/input-guard-dark.svg">
+  <img alt="Input guard on attack types it has never seen: 92% of extraction attempts caught, 0.04% of normal prompts blocked." src="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/input-guard-light.svg" width="720">
+</picture>
+
+
 Held-out test (`experiments/eval_input_guard.py`): each attack type is left out of training
 in turn and the guard is tested on it, so these are attack types it has never seen.
 267 attacks of 11 types; 10,000 real user prompts from WildChat-1M that were never trained on.
@@ -149,6 +164,11 @@ input guard switched off so only the output guards were tested (the input guard 
 trained on these exact prompts) (`infra/aws/run_experiment1.sh`,
 `experiments/score_experiment1.py`). 238 direct replies were complete; 29 hit the
 7,800-token limit.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/leak-dark.svg">
+  <img alt="Hidden reasoning reached the attacker in 100% of replies from the model served directly, and 1.6% through Unmimic, all from one bug fixed in 0.1.0." src="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/leak-light.svg" width="720">
+</picture>
 
 | | Result |
 |---|---|
@@ -182,6 +202,12 @@ passed through Unmimic. **Student 0** is the same base model with no training, t
 what it already knew. LoRA fine-tuning, identical settings for A and B
 (`experiments/build_student_data.py`, `train_student.py`, `eval_student.py`,
 `compare_students.py`).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/copycat-dark.svg">
+  <img alt="GSM8K accuracy: 0.5B copycat 29% untrained, 30% trained on full reasoning, 40% trained through Unmimic; 1.5B copycat 59%, 63%, 64%; protected model 86%." src="https://raw.githubusercontent.com/Dobbyisus/Unmimic/main/docs/img/copycat-light.svg" width="720">
+</picture>
+
 
 | Copycat base model | Untrained | A: full reasoning | B: through Unmimic |
 |---|---|---|---|
