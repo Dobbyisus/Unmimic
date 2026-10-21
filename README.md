@@ -106,14 +106,14 @@ at least 20 matched sentences fixed it.
 
 Held-out test (`experiments/eval_input_guard.py`): each attack type is left out of training
 in turn and the guard is tested on it, so these are attack types it has never seen.
-135 attacks of 11 types; 10,000 real user prompts from WildChat-1M that were never trained on.
+267 attacks of 11 types; 10,000 real user prompts from WildChat-1M that were never trained on.
 
 | | Result |
 |---|---|
-| Unseen attack types blocked | 22.2% [15.5–30.2] |
-| Unseen attack types blocked or flagged | 90.4% [84.1–94.8] |
-| Normal prompts blocked | 0.03% (at most 0.08%) |
-| Normal prompts flagged (allowed, logged) | 1.5% |
+| Unseen attack types blocked | 37.5% [31.6–43.6] |
+| Unseen attack types blocked or flagged | 92.1% [88.2–95.1] |
+| Normal prompts blocked | 0.04% (at most 0.09%) |
+| Normal prompts flagged (allowed, logged) | 1.4% |
 
 Independent test on Lakera's [Mosscap](https://huggingface.co/datasets/Lakera/mosscap_prompt_injection)
 and [Gandalf](https://huggingface.co/datasets/Lakera/gandalf_ignore_instructions) prompt-injection
@@ -122,6 +122,34 @@ to steal a password, and the guard blocks almost none of them (0.02% and 0.2%): 
 reasoning extraction, not suspicious prompts in general. With "the password" replaced by
 "your hidden reasoning" (the rest of each prompt unchanged), 95.8% [94.9–96.6] of Mosscap
 (n = 2,112) and 98.9% [97.2–99.7] of Gandalf (n = 363) are blocked or flagged.
+
+### Extraction attacks against the model, with and without Unmimic
+
+All 267 attacks (11 types) were sent to the model directly and through Unmimic, with the
+input guard switched off so only the output guards were tested (the input guard was
+trained on these exact prompts) (`infra/aws/run_experiment1.sh`,
+`experiments/score_experiment1.py`). 238 direct replies were complete; 29 hit the
+7,800-token limit.
+
+| | Result |
+|---|---|
+| Without Unmimic: hidden reasoning sent to the attacker | 100% (238 / 238): a `<think>` server sends it with every reply |
+| Attacks that got reasoning into the visible answer too | 5.9% [3.3–9.7] (14 / 238), almost all paraphrased rather than copied |
+| Through Unmimic: replies withheld as leaks | 4.5% [2.2–7.8] |
+| Through Unmimic: hidden reasoning still in the reply | 1.6% [0.4–4.0] (4 / 256) before the fix below; 0 of 2 such replies when replayed after it |
+
+The test found a real hole. Asked about its thinking, the model sometimes closed its
+reasoning with `</think>`, wrote a second block of reasoning, and closed that too. Unmimic
+cut at the first `</think>`, so the second block reached the attacker. Reasoning now ends at
+the last `</think>`. The 4 live leaks came from the old code; replaying the same pattern
+from the direct replies through the fixed code, one is withheld and the other is cut back
+to the final answer. A live re-run with the fix is still to do.
+
+Caveats: the leak detector labels which attacks succeeded, so it can't measure its own
+misses. A stricter check (meaning matched with no 20-sentence minimum) flags 2.9% [1.2–6.0] of
+replies Unmimic let through as possible leaks. Those, plus random samples, are in an
+audit file for reading by hand. Streamed replies are only partly covered: text streamed
+after the first `</think>` has already reached the user when a second one arrives.
 
 With all guards on, the proxy added 34 ms at the median on a CPU in a live test with
 short replies; on long real reasoning the meaning check is much slower (see Limitations).

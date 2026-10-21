@@ -89,13 +89,21 @@ def split_text(text: str, fmt: ModelFormat) -> Split:
 
 def _split_tags(text: str, open_tag: str, close_tag: str, implicit_open: bool) -> Split:
     start = text.find(open_tag) if open_tag else -1
-    if start >= 0:
+    close = text.find(close_tag)
+    if start >= 0 and (close < 0 or start < close):
         prefix, body = text[:start], start + len(open_tag)
-    elif implicit_open:
+    elif implicit_open or close >= 0:
+        # A closing tag with no opening tag before it: everything before it is reasoning
+        # (a skipped opening tag, or one the model wrote later in its answer).
         prefix, body = "", 0
     else:
         return Split("", text)
-    end = text.find(close_tag, body)
+    # The LAST closing tag ends the reasoning. Asked about their thinking, models sometimes
+    # close it, write a second block of reasoning and close again; cutting at the first
+    # tag shipped that second block as answer (Experiment 1, DeepSeek-R1: 4 of 267 replies
+    # through Unmimic). A closing tag inside a genuine answer is rare, and hiding more is
+    # the safe failure.
+    end = text.rfind(close_tag, body)
     if end < 0:  # still thinking, or cut off mid-reasoning
         return Split(text[body:].strip(), prefix.strip())
     return Split(text[body:end].strip(), (prefix + text[end + len(close_tag) :]).strip())
