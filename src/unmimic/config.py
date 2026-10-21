@@ -9,6 +9,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from unmimic.resources import bundled
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="UNMIMIC_")
@@ -22,11 +24,13 @@ class Settings(BaseSettings):
     # detector must come before the strip transform. Env: UNMIMIC_OUTPUT_GUARDS='[...]'
     input_guards: list[str] = ["extraction_guard"]
     output_guards: list[str] = ["leak_detector", "strip_reasoning"]
-    # What the input guard learns from: attack families, and normal prompts.
-    attack_dirs: list[Path] = [Path("attacks/public"), Path("attacks/private")]
+    # What the input guard learns from: the shipped public attack families plus your own in
+    # ./attacks/private, and normal prompts (`unmimic fetch-benign`) plus the shipped hard
+    # negatives. Missing folders and files are skipped.
+    attack_dirs: list[Path] = [bundled("attacks/public"), Path("attacks/private")]
     benign_files: list[Path] = [
         Path("data/benign/wildchat_train.jsonl"),
-        Path("benign/hard_negatives.yaml"),
+        bundled("benign/hard_negatives.yaml"),
     ]
     host: str = "127.0.0.1"
     port: int = 9000

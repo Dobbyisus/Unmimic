@@ -30,10 +30,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="reply length limit; reasoning models need room to reach their closing tag",
     )
 
-    redteam = sub.add_parser("redteam", help="attack the model and record what leaks")
+    redteam = sub.add_parser("redteam", help="(planned) attack the model and record what leaks")
     redteam.add_argument("--rounds", type=int, default=3)
 
-    calibrate = sub.add_parser("calibrate", help="set thresholds for a target false-positive rate")
+    calibrate = sub.add_parser(
+        "calibrate", help="(planned) set thresholds for a target false-positive rate"
+    )
     calibrate.add_argument("--benign", required=True, help="JSONL file of normal prompts")
     calibrate.add_argument("--fpr", type=float, default=0.001)
 
@@ -42,7 +44,13 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", help="interface to listen on (default: 127.0.0.1)")
     serve.add_argument("--port", type=int, help="port to listen on (default: 9000)")
 
-    sub.add_parser("audit", help="measure how distillable the model's outputs are")
+    sub.add_parser("audit", help="(planned) measure how distillable the model's outputs are")
+
+    fetch = sub.add_parser(
+        "fetch-benign",
+        help="download normal prompts (WildChat-1M, ~450 MB) for the input guard",
+    )
+    fetch.add_argument("--out", default="data/benign", help="folder to write to")
 
     return parser
 
@@ -123,7 +131,26 @@ def serve(args: argparse.Namespace) -> int:
     return 0
 
 
-COMMANDS = {"init": init, "serve": serve}
+def fetch_benign(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    try:
+        from unmimic.benign import fetch
+    except ImportError:
+        print(
+            "unmimic fetch-benign needs the ml extras: pip install 'unmimic[ml]'", file=sys.stderr
+        )
+        return 1
+    try:
+        fetch(Path(args.out))
+    except (ImportError, ValueError) as exc:
+        print(f"unmimic fetch-benign: {exc}", file=sys.stderr)
+        return 1
+    print("The input guard will use these the next time you run: unmimic serve")
+    return 0
+
+
+COMMANDS = {"init": init, "serve": serve, "fetch-benign": fetch_benign}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

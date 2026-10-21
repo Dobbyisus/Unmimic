@@ -4,10 +4,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "unmimic"
-version = "0.0.1"
+dynamic = ["version"]
 description = "Model-agnostic middleware that protects LLMs served over an OpenAI-compatible API from distillation attacks."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Jayraj Tiwari" }]
+keywords = ["llm", "distillation", "security", "reasoning", "guardrails", "openai", "proxy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "fastapi>=0.115",
     "httpx>=0.27",
@@ -42,11 +57,28 @@ dev = [
     "ruff>=0.6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Dobbyisus/Unmimic"
+Repository = "https://github.com/Dobbyisus/Unmimic"
+Issues = "https://github.com/Dobbyisus/Unmimic/issues"
+
 [project.scripts]
 unmimic = "unmimic.cli:main"
 
+[tool.hatch.version]
+path = "src/unmimic/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/unmimic"]
+
+# The input guard's built-in data, shipped inside the package so `pip install unmimic`
+# works outside a checkout (see unmimic/resources.py). Never attacks/private.
+[tool.hatch.build.targets.wheel.force-include]
+"attacks/public" = "unmimic/_bundled/attacks/public"
+"benign/hard_negatives.yaml" = "unmimic/_bundled/benign/hard_negatives.yaml"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src/", "/attacks/public/", "/benign/", "/LICENSE", "/README.md", "/pyproject.toml"]
 
 [tool.ruff]
 line-length = 100

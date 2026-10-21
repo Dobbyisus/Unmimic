@@ -18,9 +18,9 @@ from unmimic.guards.input.stage1 import Stage1
 from unmimic.plugins import Context, Verdict, registry
 
 # Defaults until per-deployment calibration; chosen with experiments/eval_input_guard.py
-# (leave-one-family-out): at 0.5 / 0.70, 93% of held-out-family attacks are blocked or
-# flagged and 21% blocked; the deployed guard blocked 0 of 10k held-back WildChat prompts
-# (95% upper bound 0.03%) and flagged 1.5%.
+# (leave-one-type-out, 267 attacks of 11 types): at 0.5 / 0.70, 92% of attacks of an
+# unseen type are blocked or flagged and 38% blocked; the deployed guard blocked 0.04% of
+# 10k held-back WildChat prompts (95% upper bound 0.09%) and flagged 1.4%.
 FLAG_THRESHOLD = 0.5
 MEMORY_THRESHOLD = 0.70
 CHUNK_WORDS = 40
@@ -86,7 +86,7 @@ class ExtractionGuard:
         if not families:
             raise ValueError("no attack families found")
         if not benign:
-            raise ValueError("no normal prompts found; run: python experiments/fetch_wildchat.py")
+            raise ValueError("no normal prompts found; run: unmimic fetch-benign")
 
         attacks = [example for family in families for example in family.examples]
         labels = [family.name for family in families for _ in family.examples]
