@@ -57,3 +57,6 @@ htmlcov/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local writing drafts (Medium article etc.)
+drafts/
