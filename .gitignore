@@ -10,6 +10,7 @@ attacks/**/private/
 # Attack generation and execution scripts (dual use): local only, never committed.
 experiments/generate_private_corpus.py
 experiments/run_experiment1.py
+experiments/redteam_generate.py
 # Datasets, traces, results, checkpoints
 data/
 # Keys and secrets

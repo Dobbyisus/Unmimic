@@ -21,6 +21,17 @@ Runs anywhere (laptop is fine):
   traces passed through the real output guards, so reasoning is stripped and withheld
   responses are dropped) and `answers_only` (the floor). Writes `data/students/`.
 
+Maintainer-only, gitignored (dual use, like `generate_private_corpus.py` and
+`run_experiment1.py`):
+
+- `redteam_generate.py` — the self red-team's generation step: a self-hosted generator
+  model (vLLM, local or private network only; the script refuses other hosts) writes new
+  variants of every existing attack, filtered for duplicates and off-target prompts and
+  scored by the current input guard, into `attacks/private/<type>_v<round>.yaml`.
+  `--hold-out TYPE` keeps held-out types out of the seeds; `--successes` gives the attacks
+  that worked last round more variants. Records in `data/redteam/round_<N>/`. On the GPU
+  machine: `infra/aws/run_redteam_generate.sh`.
+
 GPU machine (`.[experiments]`):
 
 - `teacher_gen.py` — the teacher solves GSM8K problems through vLLM; saves question,
