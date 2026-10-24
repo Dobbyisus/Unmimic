@@ -10,11 +10,12 @@ harvesting the model's step-by-step reasoning to train a cheaper copy.
 | **Output check**: removes hidden reasoning from replies, and withholds answers it leaked into, even translated or encoded | Working |
 | **Format probe**: learns where each model puts its reasoning (`unmimic init`) | Working |
 | **Account watch**: spots accounts that behave like copycats and slows or bans them | Planned |
-| **Self red-team and calibration**: attacks the model to find what works, and sets thresholds for a target false-positive rate | Planned |
+| **Calibration**: sets thresholds for a target false-positive rate on your own traffic (`unmimic calibrate`) | Working (not yet released) |
+| **Self red-team**: attacks the model to find what works | Planned |
 
 > **Status: alpha (0.1.0).** Everything marked working was tested against a real reasoning
 > model; see [Results](#results-so-far), including what it does *not* protect against.
-> Thresholds are defaults until calibration exists.
+> Without `unmimic calibrate`, the guards use their default thresholds.
 
 ## How it works
 
@@ -261,15 +262,20 @@ unmimic --help
 
 ## Roadmap
 
-The full per-model setup this is heading towards (the last two commands are not built
-yet):
+The full per-model setup this is heading towards (`redteam` is not built yet):
 
 ```bash
 unmimic init --endpoint http://localhost:8000/v1
 unmimic redteam --rounds 3                              # planned
-unmimic calibrate --benign my_prompts.jsonl --fpr 0.001 # planned
+unmimic calibrate --benign my_prompts.jsonl --fpr 0.001 # input guard
+unmimic calibrate --replies my_replies.jsonl --model my-model --fpr 0.001  # leak detector
 unmimic serve --port 9000
 ```
+
+`calibrate` uses split conformal prediction: half the examples set the threshold, the other
+half check it. The prompts must be ones the input guard does not train on, and the
+replies must be the model's own honest replies (`reasoning` + `answer` per line). A
+false-positive rate of 0.001 needs at least 999 examples in the calibration half.
 
 Also planned: account watch, learned trace rewriting as an output defence, and a trained
 second-stage input classifier.

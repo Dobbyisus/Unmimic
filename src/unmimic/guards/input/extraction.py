@@ -13,14 +13,15 @@ from typing import Any
 
 from unmimic.corpus import Family, load_families, load_prompts
 from unmimic.embeddings import embed, embed_cached
-from unmimic.guards.input.memory import AttackMemory
+from unmimic.guards.input.memory import AttackMemory, Match
 from unmimic.guards.input.stage1 import Stage1
 from unmimic.plugins import Context, Verdict, registry
 
-# Defaults until per-deployment calibration; chosen with experiments/eval_input_guard.py
-# (leave-one-type-out, 267 attacks of 11 types): at 0.5 / 0.70, 92% of attacks of an
-# unseen type are blocked or flagged and 38% blocked; the deployed guard blocked 0.04% of
-# 10k held-back WildChat prompts (95% upper bound 0.09%) and flagged 1.4%.
+# Defaults until `unmimic calibrate` sets MEMORY_THRESHOLD for a deployment; chosen with
+# experiments/eval_input_guard.py (leave-one-type-out, 267 attacks of 11 types): at
+# 0.5 / 0.70, 92% of attacks of an unseen type are blocked or flagged and 38% blocked; the
+# deployed guard blocked 0.04% of 10k held-back WildChat prompts (95% upper bound 0.09%)
+# and flagged 1.4%.
 FLAG_THRESHOLD = 0.5
 MEMORY_THRESHOLD = 0.70
 CHUNK_WORDS = 40
@@ -105,16 +106,29 @@ class ExtractionGuard:
 
     def decide(self, vectors: Any) -> Verdict:
         """Verdict for one request, given the embeddings of its chunks."""
+        top, best = self._nearest_flagged(vectors)
+        if best is None:
+            return Verdict(action="allow", score=top)
+        near = f"{best.attack_family} ({best.attack_similarity:.2f})"
+        if attack_score(best) >= self.memory_threshold:
+            return Verdict(action="block", score=top, reason=f"near known attack {near}")
+        return Verdict(action="flag", score=top, reason=f"stage 1 only; nearest attack {near}")
+
+    def block_score(self, vectors: Any) -> float:
+        """The score ``memory_threshold`` is compared with (0 if stage 1 flags nothing)."""
+        _, best = self._nearest_flagged(vectors)
+        return attack_score(best) if best else 0.0
+
+    def _nearest_flagged(self, vectors: Any) -> tuple[float, Match | None]:
+        """Top stage-1 score, and the memory match of the flagged chunk nearest an attack."""
         scores = self.stage1.score(vectors)
         top = float(scores.max())
         if top < self.flag_threshold:
-            return Verdict(action="allow", score=top)
+            return top, None
         flagged = vectors[scores >= self.flag_threshold]
-        best = max(self.memory.nearest(flagged), key=lambda m: m.attack_similarity)
-        near = f"{best.attack_family} ({best.attack_similarity:.2f})"
-        if (
-            best.attack_similarity >= self.memory_threshold
-            and best.attack_similarity > best.benign_similarity
-        ):
-            return Verdict(action="block", score=top, reason=f"near known attack {near}")
-        return Verdict(action="flag", score=top, reason=f"stage 1 only; nearest attack {near}")
+        return top, max(self.memory.nearest(flagged), key=lambda m: m.attack_similarity)
+
+
+def attack_score(match: Match) -> float:
+    """Similarity to the nearest known attack, or 0 if a normal prompt is at least as close."""
+    return match.attack_similarity if match.attack_similarity > match.benign_similarity else 0.0

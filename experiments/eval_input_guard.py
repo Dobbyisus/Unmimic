@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import beta
 
+from unmimic.adapt.calibrate import Calibration
 from unmimic.config import Settings
 from unmimic.corpus import load_families, load_prompts
 from unmimic.embeddings import embed, embed_cached
@@ -108,6 +109,10 @@ def main() -> None:
     print(f"embedded held-back normal prompts in {time.perf_counter() - started:.0f}s")
 
     grid = [(f, m) for f in FLAG_GRID for m in MEMORY_GRID]
+    # Also the threshold `unmimic calibrate` set, so its attack recall is on record.
+    calibrated = Calibration.load(settings.calibration_file).input_guard
+    if calibrated:
+        grid.append((FLAG_THRESHOLD, calibrated.threshold))
     attack_actions: dict[tuple, list[str]] = {g: [] for g in grid}
     # Per fold: how many held-back normal prompts were blocked / flagged. Folds score the
     # same 10k prompts, so bounds use n = 10k per fold (not 10 x 10k).

@@ -171,9 +171,15 @@ class LeakGuard:
         self,
         threshold: float = DEFAULT_THRESHOLD,
         semantic_model: str | None = DEFAULT_SEMANTIC_MODEL,
+        model_thresholds: dict[str, float] | None = None,
     ) -> None:
         self.threshold = threshold
+        # Per-model thresholds from `unmimic calibrate`; other models use ``threshold``.
+        self.model_thresholds = dict(model_thresholds or {})
         self.matcher = load_matcher(semantic_model) if semantic_model else None
+
+    def threshold_for(self, model: str) -> float:
+        return self.model_thresholds.get(model, self.threshold)
 
     def transform(self, response: dict[str, Any], reasoning: str, ctx: Context) -> dict[str, Any]:
         fmt: ModelFormat = ctx.metadata.get("format", DEFAULT_FORMAT)
@@ -183,7 +189,7 @@ class LeakGuard:
             message = choice.get("message") or {}
             answer = split_text(message.get("content") or "", fmt).answer
             leak = leak_score(answer, reasoning, self.matcher)
-            if leak.score >= self.threshold:
+            if leak.score >= self.threshold_for(ctx.model):
                 self._record(ctx, leak)
                 message["content"] = NOTICE
                 choice["finish_reason"] = "content_filter"
@@ -211,7 +217,7 @@ class LeakGuard:
                 continue
             state["checked"][index] = len(answer)
             leak = leak_score(answer, reasoning, self.matcher)
-            if leak.score >= self.threshold:
+            if leak.score >= self.threshold_for(ctx.model):
                 state["tripped"] = True
                 self._record(ctx, leak)
                 delta["content"] = "\n\n" + NOTICE

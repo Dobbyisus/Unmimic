@@ -32,6 +32,8 @@ class Settings(BaseSettings):
         Path("data/benign/wildchat_train.jsonl"),
         bundled("benign/hard_negatives.yaml"),
     ]
+    # Thresholds written by `unmimic calibrate`; without it the guards use their defaults.
+    calibration_file: Path = Path("data/calibration.json")
     host: str = "127.0.0.1"
     port: int = 9000
     data_dir: Path = Path("data")
