@@ -30,7 +30,8 @@ Maintainer-only, gitignored (dual use, like `generate_private_corpus.py` and
   scored by the current input guard, into `attacks/private/<type>_v<round>.yaml`.
   `--hold-out TYPE` keeps held-out types out of the seeds; `--successes` gives the attacks
   that worked last round more variants. Records in `data/redteam/round_<N>/`. On the GPU
-  machine: `infra/aws/run_redteam_generate.sh`.
+  machine: `infra/aws/run_redteam_round.sh`, which also sends a sample of the new
+  attacks to the teacher (directly and through Unmimic) and scores the replies.
 
 GPU machine (`.[experiments]`):
 

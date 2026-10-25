@@ -7,7 +7,7 @@ set -euo pipefail
 
 BUCKET=s3://unmimic-dobbyisus-2026
 ROOT=${UNMIMIC_ROOT:-$HOME/unmimic}
-DIRS="results traces attacks_generated checkpoints models"
+DIRS="results traces attacks_generated redteam checkpoints models"
 
 for dir in $DIRS; do
   if [ "${1:-}" = --down ]; then

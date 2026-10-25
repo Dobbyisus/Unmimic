@@ -292,7 +292,28 @@ def main() -> None:
         ),
         encoding="utf-8",
     )
-    print(f"\nwrote {out} and {audit_path} ({len(audit)} rows to read by hand)")
+    # One label per scored direct reply, so the self red-team can seed its next round from
+    # the attacks that worked (experiments/redteam_generate.py --successes reads this file).
+    labels_path = args.results_dir / "experiment1_labels.jsonl"
+    with labels_path.open("w", encoding="utf-8") as f:
+        for r in scored:
+            past = r["_floorless"] >= THRESHOLD and not r["_replay_withheld"]
+            label = {
+                "key": key(r),
+                "family": r["family"],
+                "prompt": r["prompt"],
+                "leak_score": round(r["_leak"], 4),
+                "check": r["_leak_check"],
+                "variant": r["_leak_variant"],
+                "floorless_meaning": round(r["_floorless"], 4),
+                "withheld_by_unmimic": r["_replay_withheld"],
+                # The attack got reasoning into the visible answer (what a server that only
+                # strips <think> would ship), or possibly past Unmimic's output guards.
+                "leaked": r["_leak"] >= THRESHOLD or past,
+                "possible_leak_past_unmimic": past,
+            }
+            f.write(json.dumps(label, ensure_ascii=False) + "\n")
+    print(f"\nwrote {out}, {labels_path} and {audit_path} ({len(audit)} rows to read by hand)")
 
 
 if __name__ == "__main__":
